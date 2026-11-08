@@ -1,0 +1,1554 @@
+<!doctype html>
+<html lang="zh">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover">
+<title>飞飞小猫</title>
+<style>
+  body {
+    margin: 0;
+    min-height: 100vh;
+    display: flex;
+    justify-content: center;
+    align-items: flex-start;
+    gap: 20px;
+    padding: 20px;
+    box-sizing: border-box;
+    background: #2b2340;
+    font-family: "Microsoft YaHei", sans-serif;
+    flex-wrap: wrap;
+  }
+  canvas {
+    display: block;
+    border-radius: 16px;
+    box-shadow: 0 10px 40px rgba(0,0,0,0.4);
+    cursor: pointer;
+    /* 自动缩放：不超过屏幕宽度，也不超过屏幕高度（保持 2:3 比例） */
+    width: min(400px, calc(100vw - 32px), calc((100dvh - 32px) * 2 / 3));
+    height: auto;
+    touch-action: none;            /* 手机上点游戏时不要滚动 / 缩放 */
+    -webkit-user-select: none;
+    user-select: none;
+  }
+  body { touch-action: manipulation; -webkit-tap-highlight-color: transparent; }
+
+  /* ===== 手机：设置放到游戏下面，默认收起 ===== */
+  @media (max-width: 720px) {
+    body { padding: 16px; gap: 14px; }
+    body #settings { width: 100%; max-height: none; }
+    body .panel { max-height: none; }
+    .popup { padding: 20px 24px; }
+    .popup h2 { font-size: 22px; }
+  }
+
+  /* ===== 设置面板 ===== */
+  #settings {
+    width: 260px;
+    max-height: 600px;          /* 和游戏窗口一样高，不会超出 */
+    background: #fff8f0;
+    border-radius: 16px;
+    box-shadow: 0 10px 40px rgba(0,0,0,0.4);
+    overflow: hidden;
+  }
+  #settings summary {
+    box-sizing: border-box;
+    height: 50px;
+    padding: 14px 18px;
+    font-size: 18px;
+    font-weight: bold;
+    cursor: pointer;
+    background: #ff8fab;
+    color: white;
+    list-style: none;
+    user-select: none;
+  }
+  #settings summary::-webkit-details-marker { display: none; }
+  #settings summary::after { content: " ▼"; float: right; }
+  #settings:not([open]) summary::after { content: " ▶"; }
+  .panel {
+    box-sizing: border-box;
+    max-height: 550px;          /* 600 - 标题栏 50 */
+    overflow-y: auto;           /* 内容多了就在面板里面滚动 */
+    padding: 14px 18px;
+    scrollbar-width: thin;
+    scrollbar-color: #ffafc5 transparent;
+  }
+  .panel h3 {
+    margin: 4px 0 10px;
+    padding-bottom: 4px;
+    font-size: 15px;
+    color: #ff5d8f;
+    border-bottom: 2px dashed #ffd6e0;
+  }
+  .panel h3:not(:first-child) { margin-top: 18px; }
+  .inline { display: flex; align-items: center; justify-content: space-between; gap: 10px; }
+  .inline label { margin: 0; }
+  .toggle { display: flex; align-items: center; gap: 6px; font-size: 14px; color: #5a4a5e; cursor: pointer; }
+  .toggle input { accent-color: #ff8fab; width: 16px; height: 16px; }
+  .panel select {
+    width: 100%;
+    padding: 7px;
+    border-radius: 10px;
+    border: 2px solid #ffc2d1;
+    background: white;
+    font-size: 14px;
+    font-family: inherit;
+    color: #5a4a5e;
+  }
+  #styleTip { font-size: 13px; color: #9b5de5; margin-top: 6px; }
+  #bgPreview {
+    width: 100%;
+    height: 60px;
+    border-radius: 10px;
+    background: #ffe5ec center / cover no-repeat;
+    margin-bottom: 8px;
+    display: none;
+  }
+  .row { margin-bottom: 14px; }
+  .row label {
+    display: flex;
+    justify-content: space-between;
+    font-size: 14px;
+    color: #5a4a5e;
+    margin-bottom: 4px;
+  }
+  .row label b { color: #ff5d8f; }
+  .row input[type=range] { width: 100%; accent-color: #ff8fab; }
+  .emojis { display: flex; flex-wrap: wrap; gap: 6px; }
+  .emojis button {
+    font-size: 24px;
+    border: 2px solid transparent;
+    background: #ffe5ec;
+    border-radius: 10px;
+    cursor: pointer;
+    padding: 2px 6px;
+  }
+  .emojis button.selected { border-color: #ff5d8f; background: #ffc2d1; }
+  .colors { display: flex; gap: 10px; }
+  .colors input { width: 50px; height: 34px; border: none; cursor: pointer; background: none; }
+  /* ===== 游戏区域 + 弹窗 ===== */
+  #gameBox { position: relative; }
+  #overlay {
+    position: absolute;
+    inset: 0;
+    display: none;
+    justify-content: center;
+    align-items: center;
+    background: rgba(43, 35, 64, 0.45);
+    border-radius: 16px;
+  }
+  #overlay.show { display: flex; }
+  .popup {
+    background: #fff8f0;
+    border-radius: 20px;
+    padding: 26px 34px;
+    text-align: center;
+    box-shadow: 0 10px 30px rgba(0,0,0,0.3);
+    animation: pop 0.25s ease-out;
+  }
+  @keyframes pop { from { transform: scale(0.6); opacity: 0; } to { transform: scale(1); opacity: 1; } }
+  .popup h2 { margin: 0 0 12px; color: #ff5d8f; font-size: 28px; }
+  .popup p { margin: 6px 0; color: #5a4a5e; font-size: 18px; }
+  .popup .big { font-size: 44px; font-weight: bold; color: #9b5de5; }
+  .popup button {
+    margin-top: 16px;
+    padding: 10px 26px;
+    font-size: 18px;
+    border: none;
+    border-radius: 12px;
+    background: #ff8fab;
+    color: white;
+    cursor: pointer;
+    font-family: inherit;
+  }
+  .popup button:hover { background: #ff5d8f; }
+
+  .emojis button img { width: 28px; height: 28px; border-radius: 50%; object-fit: cover; display: block; }
+  .photoBtns { display: flex; gap: 8px; margin-top: 8px; }
+  .photoBtns button {
+    flex: 1;
+    padding: 7px;
+    border: none;
+    border-radius: 10px;
+    background: #ffc2d1;
+    color: #5a4a5e;
+    font-size: 14px;
+    cursor: pointer;
+    font-family: inherit;
+  }
+  .photoBtns button:hover { background: #ffafc5; }
+
+  /* ===== 拍照窗口 ===== */
+  #cameraModal {
+    position: fixed;
+    inset: 0;
+    display: none;
+    justify-content: center;
+    align-items: center;
+    background: rgba(0,0,0,0.6);
+    z-index: 10;
+  }
+  #cameraModal.show { display: flex; }
+  #cameraModal .popup video {
+    width: 280px;
+    height: 280px;
+    object-fit: cover;
+    border-radius: 50%;
+    transform: scaleX(-1);   /* 像镜子一样 */
+    background: #333;
+    display: block;
+    margin: 0 auto;
+  }
+  #cameraModal .popup button.gray { background: #cdb4db; margin-left: 8px; }
+
+  #reset {
+    width: 100%;
+    padding: 8px;
+    border: none;
+    border-radius: 10px;
+    background: #cdb4db;
+    color: white;
+    font-size: 14px;
+    cursor: pointer;
+  }
+</style>
+</head>
+<body>
+<div id="gameBox">
+  <canvas id="game" width="400" height="600"></canvas>
+  <div id="overlay">
+    <div class="popup">
+      <h2>哎呀，撞到啦！</h2>
+      <p>这次得分</p>
+      <p class="big" id="finalScore">0</p>
+      <p>最高分：<b id="bestScore">0</b></p>
+      <p>这局收集：<b id="coinCount">0</b>　累计：<b id="coinTotal">0</b></p>
+      <button id="restart">再玩一次</button>
+    </div>
+  </div>
+</div>
+
+<div id="cameraModal">
+  <div class="popup">
+    <h2>📷 拍一张做角色</h2>
+    <video id="video" autoplay playsinline muted></video>
+    <p id="cameraTip" style="font-size:14px"></p>
+    <button id="snapBtn">咔嚓！</button>
+    <button id="cancelCam" class="gray">取消</button>
+  </div>
+</div>
+
+<details id="settings" open>
+  <summary>⚙️ 设置</summary>
+  <div class="panel">
+    <h3>🐾 角色</h3>
+    <div class="row">
+      <div class="emojis" id="emojiList"></div>
+      <div class="photoBtns">
+        <button id="cameraBtn">📷 拍照</button>
+        <button id="albumBtn">🖼️ 相册</button>
+      </div>
+      <input type="file" id="fileInput" accept="image/*" hidden>
+    </div>
+    <h3>🎮 手感</h3>
+    <div class="row">
+      <label>重力 <b id="gravityVal"></b></label>
+      <input type="range" id="gravity" min="0.01" max="0.09" step="0.005">
+    </div>
+    <div class="row">
+      <label>跳跃力度 <b id="jumpVal"></b></label>
+      <input type="range" id="jump" min="1" max="6" step="0.25">
+    </div>
+    <div class="row">
+      <label>起始速度 <b id="pipeSpeedVal"></b></label>
+      <input type="range" id="pipeSpeed" min="0.2" max="1.8" step="0.1">
+    </div>
+    <div class="row">
+      <label>最快速度（越飞越快到这里为止） <b id="maxSpeedVal"></b></label>
+      <input type="range" id="maxSpeed" min="1.2" max="2.8" step="0.1">
+    </div>
+    <div class="row">
+      <label>柱子间缝隙 <b id="gapVal"></b></label>
+      <input type="range" id="gap" min="160" max="360" step="10">
+    </div>
+    <h3>🎨 主题</h3>
+    <div class="row">
+      <select id="theme">
+        <option value="默认">🎠 默认（粉色城市）</option>
+        <option value="万圣节">🎃 万圣节</option>
+        <option value="圣诞">🎄 圣诞</option>
+        <option value="中国">🏮 中国（上海）</option>
+      </select>
+      <div id="styleTip"></div>
+    </div>
+
+    <h3>🏙️ 场景</h3>
+    <div class="row">
+      <label>游戏背景图</label>
+      <div id="bgPreview"></div>
+      <div class="photoBtns" style="margin-top:0">
+        <button id="bgBtn">🏞️ 上传背景</button>
+        <button id="bgClear">清除</button>
+      </div>
+      <input type="file" id="bgInput" accept="image/*" hidden>
+    </div>
+    <div class="row">
+      <label>天空颜色（上 / 下）</label>
+      <div class="colors">
+        <input type="color" id="skyTop">
+        <input type="color" id="skyBottom">
+      </div>
+    </div>
+    <div class="row inline">
+      <label class="toggle"><input type="checkbox" id="showClouds"> ☁️ 白云</label>
+      <div class="colors"><input type="color" id="cloudColor"></div>
+    </div>
+    <div class="row inline">
+      <label class="toggle"><input type="checkbox" id="showCity"> 🏙️ 城市</label>
+      <div class="colors"><input type="color" id="cityColor"></div>
+    </div>
+    <div class="row inline">
+      <label>柱子颜色</label>
+      <div class="colors"><input type="color" id="pipeColor"></div>
+    </div>
+
+    <h3>🎵 声音</h3>
+    <div class="row inline">
+      <label class="toggle"><input type="checkbox" id="musicOn"> 背景音乐</label>
+      <label class="toggle"><input type="checkbox" id="sfxOn"> 音效</label>
+    </div>
+
+    <button id="reset">恢复默认</button>
+  </div>
+</details>
+
+<script>
+// ============================================
+// 默认设置
+// ============================================
+const 存档名 = "飞飞小猫设置v3";   // 换了名字，这样新的默认值会生效
+const 默认设置 = {
+  角色: "🐱",          // emoji，或者 "照片"
+  照片: null,          // 拍照/相册得到的图片（小尺寸）
+  重力: 0.05,
+  跳跃力度: 3.5,
+  柱子速度: 1,
+  最快速度: 2,
+  缝隙: 260,
+  天空上: "#ffb3c6",
+  天空下: "#ffe5b4",
+  柱子颜色: "#9b5de5",
+  背景图: null,        // 上传的背景（缩小后的图片）
+  显示白云: true,
+  白云颜色: "#ffffff",
+  显示城市: true,
+  城市颜色: "#6d597a",
+  音乐: true,
+  音效: true,
+  主题: "默认",
+};
+
+// 每个主题：颜色 + 用哪种音乐（选主题时会把颜色套用上去，之后还能自己改）
+const 主题库 = {
+  默认:   { 天空上: "#ffb3c6", 天空下: "#ffe5b4", 柱子颜色: "#9b5de5", 城市颜色: "#6d597a", 白云颜色: "#ffffff", 音乐: "欢快", 说明: "🎵 欢快的游乐场音乐" },
+  万圣节: { 天空上: "#1b1033", 天空下: "#ff7b2e", 柱子颜色: "#3b2a4d", 城市颜色: "#120b1f", 白云颜色: "#8a7fa0", 音乐: "恐怖", 说明: "🎵 心跳 + 嗡嗡声 + 诡异铃声" },
+  圣诞:   { 天空上: "#0b1d3a", 天空下: "#4a78b0", 柱子颜色: "#d62828", 城市颜色: "#1d2d44", 白云颜色: "#e8f1ff", 音乐: "梦幻", 说明: "🎵 梦幻琶音 + 雪橇铃铛" },
+  中国:   { 天空上: "#2a1b4a", 天空下: "#ff8a5c", 柱子颜色: "#c1121f", 城市颜色: "#2b1d3a", 白云颜色: "#ffd6a5", 音乐: "中国", 说明: "🎵 五声音阶 + 木鱼 + 锣" },
+};
+const 角色列表 = ["🐱", "🐰", "🐶", "🦄", "👻", "🐧", "🐸", "🐝"];
+
+let 设置 = { ...默认设置 };
+// 记住上次的设置（刷新后还在）
+try {
+  const saved = JSON.parse(localStorage.getItem(存档名));
+  if (saved) 设置 = { ...默认设置, ...saved };
+} catch (e) {}
+
+function 保存() {
+  try { localStorage.setItem(存档名, JSON.stringify(设置)); } catch (e) {}
+}
+
+// ============================================
+// 设置面板：把滑块和颜色连到「设置」上
+// ============================================
+const $ = (id) => document.getElementById(id);
+
+function 连接滑块(id, key, 显示id) {
+  const el = $(id);
+  el.value = 设置[key];
+  $(显示id).textContent = 设置[key];
+  el.oninput = () => {
+    设置[key] = Number(el.value);
+    $(显示id).textContent = el.value;
+    保存();
+  };
+}
+function 连接颜色(id, key, 之后) {
+  const el = $(id);
+  el.value = 设置[key];
+  el.oninput = () => { 设置[key] = el.value; 保存(); if (之后) 之后(); };
+}
+function 连接勾选(id, key, 之后) {
+  const el = $(id);
+  el.checked = 设置[key];
+  el.onchange = () => { 设置[key] = el.checked; 保存(); if (之后) 之后(); };
+}
+function 画角色按钮() {
+  const box = $("emojiList");
+  box.innerHTML = "";
+  角色列表.forEach((e) => {
+    const b = document.createElement("button");
+    b.textContent = e;
+    if (e === 设置.角色) b.className = "selected";
+    b.onclick = () => { 设置.角色 = e; 保存(); 画角色按钮(); };
+    box.appendChild(b);
+  });
+  // 如果有照片，也放进列表里
+  if (设置.照片) {
+    const b = document.createElement("button");
+    const img = document.createElement("img");
+    img.src = 设置.照片;
+    b.appendChild(img);
+    if (设置.角色 === "照片") b.className = "selected";
+    b.onclick = () => { 设置.角色 = "照片"; 保存(); 画角色按钮(); };
+    box.appendChild(b);
+  }
+}
+
+// ============================================
+// 照片角色：拍照 / 相册
+// ============================================
+const 照片图 = new Image();
+if (设置.照片) 照片图.src = 设置.照片;
+
+// 把任意图片裁成中间的正方形，缩小到 160x160，存起来当角色
+function 用这张图(source, w, h, 镜像) {
+  const size = 160;
+  const c = document.createElement("canvas");
+  c.width = c.height = size;
+  const g = c.getContext("2d");
+  const side = Math.min(w, h);
+  if (镜像) { g.translate(size, 0); g.scale(-1, 1); }
+  g.drawImage(source, (w - side) / 2, (h - side) / 2, side, side, 0, 0, size, size);
+  设置.照片 = c.toDataURL("image/jpeg", 0.85);
+  设置.角色 = "照片";
+  照片图.src = 设置.照片;
+  保存();
+  画角色按钮();
+}
+
+// 相册
+$("albumBtn").onclick = () => $("fileInput").click();
+$("fileInput").onchange = (e) => {
+  const file = e.target.files[0];
+  if (!file) return;
+  const img = new Image();
+  img.onload = () => { 用这张图(img, img.naturalWidth, img.naturalHeight, false); URL.revokeObjectURL(img.src); };
+  img.src = URL.createObjectURL(file);
+  e.target.value = "";
+};
+
+// 相机
+let 相机流 = null;
+function 关相机() {
+  if (相机流) 相机流.getTracks().forEach((t) => t.stop());
+  相机流 = null;
+  $("cameraModal").classList.remove("show");
+}
+$("cameraBtn").onclick = async () => {
+  $("cameraTip").textContent = "正在打开相机…";
+  $("snapBtn").disabled = true;
+  $("cameraModal").classList.add("show");
+  try {
+    相机流 = await navigator.mediaDevices.getUserMedia({ video: { facingMode: "user" } });
+    $("video").srcObject = 相机流;
+    $("cameraTip").textContent = "把脸放在圆圈中间～";
+    $("snapBtn").disabled = false;
+  } catch (err) {
+    $("cameraTip").textContent = "打不开相机 😢 请允许浏览器使用相机，或者用「相册」选一张照片。";
+  }
+};
+$("snapBtn").onclick = () => {
+  const v = $("video");
+  if (!v.videoWidth) return;
+  用这张图(v, v.videoWidth, v.videoHeight, true);
+  关相机();
+};
+$("cancelCam").onclick = 关相机;
+
+// ============================================
+// 背景图：上传 / 清除
+// ============================================
+const 背景图 = new Image();
+if (设置.背景图) 背景图.src = 设置.背景图;
+
+$("bgBtn").onclick = () => $("bgInput").click();
+$("bgInput").onchange = (e) => {
+  const file = e.target.files[0];
+  if (!file) return;
+  const img = new Image();
+  img.onload = () => {
+    // 按游戏窗口 400x600 的比例裁剪，缩小后存起来
+    const W = 400, H = 600;
+    const c = document.createElement("canvas");
+    c.width = W; c.height = H;
+    const g = c.getContext("2d");
+    const scale = Math.max(W / img.naturalWidth, H / img.naturalHeight);
+    const w = img.naturalWidth * scale, h = img.naturalHeight * scale;
+    g.drawImage(img, (W - w) / 2, (H - h) / 2, w, h);
+    设置.背景图 = c.toDataURL("image/jpeg", 0.8);
+    背景图.src = 设置.背景图;
+    保存();
+    更新背景预览();
+    URL.revokeObjectURL(img.src);
+  };
+  img.src = URL.createObjectURL(file);
+  e.target.value = "";
+};
+$("bgClear").onclick = () => {
+  设置.背景图 = null;
+  背景图.removeAttribute("src");
+  保存();
+  更新背景预览();
+};
+function 更新背景预览() {
+  const p = $("bgPreview");
+  if (设置.背景图) {
+    p.style.display = "block";
+    p.style.backgroundImage = `url(${设置.背景图})`;
+  } else {
+    p.style.display = "none";
+  }
+}
+
+// 主题决定音乐风格
+const 主题 = () => 主题库[设置.主题] || 主题库.默认;
+function 当前风格() { return 主题().音乐; }
+
+// ============================================
+// 声音：全部用代码"弹"出来，不需要音乐文件
+// ============================================
+let ac = null, 总音量, 音乐音量, 音效音量, 回声;
+const 音高 = (n) => 440 * Math.pow(2, (n - 69) / 12);   // 琴键号 → 频率
+
+function 初始化声音() {
+  if (ac) { if (ac.state === "suspended") ac.resume(); return; }
+  const AC = window.AudioContext || window.webkitAudioContext;
+  if (!AC) return;
+  ac = new AC();
+  总音量 = ac.createGain(); 总音量.gain.value = 0.8; 总音量.connect(ac.destination);
+  音乐音量 = ac.createGain(); 音乐音量.connect(总音量);
+  音效音量 = ac.createGain(); 音效音量.connect(总音量);
+  // 回声效果（梦幻 / 恐怖用）
+  回声 = ac.createDelay(); 回声.delayTime.value = 0.33;
+  const 回馈 = ac.createGain(); 回馈.gain.value = 0.35;
+  回声.connect(回馈); 回馈.connect(回声); 回声.connect(音乐音量);
+  更新音量();
+  开始音乐();
+}
+// 浏览器规定：用户点过页面之后才能出声
+// （苹果手机要在 touchend / click 里才能解锁声音，所以几个都监听）
+for (const 事件 of ["pointerdown", "touchend", "click", "keydown"]) document.addEventListener(事件, 初始化声音);
+
+// 手机屏幕窄：设置面板默认收起，放在游戏下面
+const 是手机 = () => Math.min(window.innerWidth, screen.width) <= 720 || matchMedia("(pointer: coarse)").matches;
+if (是手机()) $("settings").open = false;
+window.addEventListener("load", () => { if (是手机()) $("settings").open = false; });
+
+function 更新音量() {
+  if (!ac) return;
+  音乐音量.gain.setTargetAtTime(设置.音乐 ? 0.35 : 0, ac.currentTime, 0.1);
+  音效音量.gain.setTargetAtTime(设置.音效 ? 0.7 : 0, ac.currentTime, 0.05);
+}
+
+// 弹一个音
+function 音(频率, 开始, 长度, o = {}) {
+  const osc = ac.createOscillator();
+  const g = ac.createGain();
+  osc.type = o.波形 || "sine";
+  osc.frequency.setValueAtTime(频率, 开始);
+  if (o.滑到) osc.frequency.exponentialRampToValueAtTime(o.滑到, 开始 + 长度);
+  if (o.走音) osc.detune.value = o.走音;
+  const 起 = o.起音 || 0.01, 量 = o.量 || 0.2;
+  g.gain.setValueAtTime(0.0001, 开始);
+  g.gain.exponentialRampToValueAtTime(量, 开始 + 起);
+  g.gain.exponentialRampToValueAtTime(0.0001, 开始 + 长度);
+  let 输出 = g;
+  if (o.低通) {
+    const f = ac.createBiquadFilter();
+    f.type = "lowpass"; f.frequency.value = o.低通;
+    g.connect(f); 输出 = f;
+  }
+  osc.connect(g);
+  输出.connect(o.去 || 音乐音量);
+  if (o.回声) 输出.connect(回声);
+  osc.start(开始);
+  osc.stop(开始 + 长度 + 0.05);
+}
+// 一阵噪音（沙沙声、风声、撞击声）
+function 噪音(开始, 长度, o = {}) {
+  const buf = ac.createBuffer(1, Math.ceil(ac.sampleRate * 长度), ac.sampleRate);
+  const d = buf.getChannelData(0);
+  for (let i = 0; i < d.length; i++) d[i] = Math.random() * 2 - 1;
+  const src = ac.createBufferSource(); src.buffer = buf;
+  const f = ac.createBiquadFilter();
+  f.type = o.类型 || "bandpass"; f.frequency.value = o.频率 || 1000;
+  const g = ac.createGain();
+  g.gain.setValueAtTime(o.量 || 0.1, 开始);
+  g.gain.exponentialRampToValueAtTime(0.0001, 开始 + 长度);
+  src.connect(f); f.connect(g); g.connect(o.去 || 音乐音量);
+  src.start(开始);
+}
+
+// 每种风格：速度（每分钟拍数）、音乐（每个八分音符调用一次）、三个音效
+const 风格库 = {
+  欢快: {
+    速度: 132,
+    音乐(步, t, 长) {
+      const 和弦 = [[60, 64, 67], [57, 60, 64], [53, 57, 60], [55, 59, 62]];   // C Am F G
+      const 小节 = Math.floor(步 / 8) % 4, s = 步 % 8, c = 和弦[小节];
+      if (s % 4 === 0) 音(音高(c[0] - 24), t, 长 * 1.8, { 波形: "triangle", 量: 0.5 });
+      if (s % 4 === 2) 音(音高(c[2] - 24), t, 长 * 1.5, { 波形: "triangle", 量: 0.35 });
+      const 花样 = 小节 % 2 ? [2, 1, 0, 2, 1, 0, 2, 1] : [0, 1, 2, 1, 2, 1, 0, 1];
+      音(音高(c[花样[s]] + 12), t, 长 * 0.9, { 波形: "square", 量: 0.06 });
+      if (s % 2 === 1) 噪音(t, 0.04, { 类型: "highpass", 频率: 7000, 量: 0.06 });
+    },
+    跳(t) { 音(520, t, 0.12, { 波形: "square", 滑到: 950, 量: 0.15, 去: 音效音量 }); },
+    得分(t) {
+      音(音高(84), t, 0.09, { 波形: "square", 量: 0.12, 去: 音效音量 });
+      音(音高(88), t + 0.08, 0.2, { 波形: "square", 量: 0.12, 去: 音效音量 });
+    },
+    撞(t) { 音(420, t, 0.55, { 波形: "sawtooth", 滑到: 70, 量: 0.25, 低通: 1500, 去: 音效音量 }); },
+  },
+  恐怖: {
+    速度: 70,
+    音乐(步, t, 长) {
+      const s = 步 % 8, 小节 = Math.floor(步 / 8);
+      if (s === 0) {   // 低沉的嗡嗡声（两个挨得很近的音，听着不舒服）
+        音(音高(33), t, 长 * 8.3, { 波形: "sawtooth", 量: 0.22, 起音: 1.2, 低通: 220 });
+        音(音高(34), t, 长 * 8.3, { 波形: "sawtooth", 量: 0.12, 起音: 1.5, 低通: 260 });
+      }
+      if (s === 0 || s === 1) {   // 心跳：咚、咚
+        音(70, t, 0.3, { 量: s === 0 ? 0.7 : 0.45, 滑到: 35 });
+      }
+      if (s === 4 || Math.random() < 0.12) {   // 远处诡异的铃声
+        const 铃 = [69, 70, 75, 78, 81][Math.floor(Math.random() * 5)];
+        音(音高(铃), t, 2.5, { 量: 0.06, 回声: true });
+        音(音高(铃), t, 2.5, { 量: 0.04, 走音: 30 });
+      }
+      if (s === 6 && 小节 % 2 === 1) 噪音(t, 1.6, { 频率: 700, 量: 0.05, 回声: true });   // 风声 / 低语
+    },
+    跳(t) {
+      噪音(t, 0.3, { 频率: 500, 量: 0.25, 去: 音效音量 });
+      音(200, t, 0.3, { 滑到: 90, 量: 0.2, 去: 音效音量 });
+    },
+    得分(t) {
+      音(音高(87), t, 1.2, { 量: 0.12, 去: 音效音量 });
+      音(音高(88), t, 1.2, { 量: 0.08, 去: 音效音量 });
+    },
+    撞(t) {
+      噪音(t, 0.7, { 类型: "lowpass", 频率: 1200, 量: 0.5, 去: 音效音量 });
+      音(320, t, 0.9, { 波形: "sawtooth", 滑到: 40, 量: 0.25, 去: 音效音量 });
+    },
+  },
+  梦幻: {
+    速度: 80,
+    音乐(步, t, 长) {
+      const 和弦 = [[60, 64, 67, 71], [57, 60, 64, 67], [53, 57, 60, 64], [55, 59, 62, 69]];
+      const 小节 = Math.floor(步 / 8) % 4, s = 步 % 8, c = 和弦[小节];
+      if (s === 0) {
+        音(音高(c[0] - 24), t, 长 * 7, { 量: 0.3, 起音: 0.3 });
+        c.forEach((n) => 音(音高(n), t, 长 * 8, { 波形: "triangle", 量: 0.03, 起音: 0.8 }));
+      }
+      const 花样 = [0, 1, 2, 3, 2, 1, 2, 3];
+      音(音高(c[花样[s]] + 12), t, 1.2, { 量: 0.1, 回声: true });
+      // 雪橇铃铛：沙啦沙啦
+      if (s % 2 === 1) 噪音(t, 0.12, { 类型: "highpass", 频率: 8000, 量: 0.08 });
+      if (s === 2 || s === 6) 音(音高(100), t, 0.25, { 量: 0.03 });
+    },
+    跳(t) {
+      音(音高(84), t, 0.4, { 量: 0.18, 去: 音效音量 });
+      音(音高(91), t, 0.4, { 量: 0.08, 去: 音效音量 });
+    },
+    得分(t) {
+      [84, 88, 91, 96].forEach((n, i) => 音(音高(n), t + i * 0.06, 0.5, { 量: 0.12, 去: 音效音量 }));
+    },
+    撞(t) { 音(660, t, 0.7, { 波形: "triangle", 滑到: 200, 量: 0.25, 去: 音效音量 }); },
+  },
+  中国: {
+    速度: 96,
+    // 只用五声音阶（宫商角徵羽 = C D E G A），像古筝在弹
+    音乐(步, t, 长) {
+      const 旋律 = [
+        [76, 79, 81, 79, 76, 74, 72, 74],
+        [76, 76, 74, 72, 69, 72, 74, 0],
+        [79, 81, 84, 81, 79, 76, 79, 81],
+        [79, 76, 74, 76, 72, 0, 72, 0],
+      ];
+      const 小节 = Math.floor(步 / 8) % 4, s = 步 % 8, n = 旋律[小节][s];
+      if (n) {   // 拨弦声：三角波 + 高八度泛音，很快衰减
+        音(音高(n), t, 0.6, { 波形: "triangle", 量: 0.16 });
+        音(音高(n + 12), t, 0.3, { 量: 0.04 });
+      }
+      if (s === 0) 音(音高(小节 % 2 ? 43 : 48), t, 长 * 4, { 量: 0.25, 起音: 0.05 });   // 低音
+      if (s % 2 === 0) 音(900, t, 0.05, { 量: 0.12 });                                 // 木鱼：哒
+      if (s === 0 && 小节 === 0) {                                                        // 锣：哐～
+        噪音(t, 2.2, { 类型: "lowpass", 频率: 500, 量: 0.12 });
+        音(110, t, 2.2, { 量: 0.12, 滑到: 98, 走音: 15 });
+      }
+    },
+    跳(t) { 音(音高(81), t, 0.35, { 波形: "triangle", 量: 0.2, 滑到: 音高(84), 去: 音效音量 }); },
+    得分(t) {
+      音(音高(84), t, 0.3, { 波形: "triangle", 量: 0.18, 去: 音效音量 });
+      音(音高(88), t + 0.09, 0.4, { 波形: "triangle", 量: 0.18, 去: 音效音量 });
+    },
+    撞(t) {
+      噪音(t, 1.5, { 类型: "lowpass", 频率: 700, 量: 0.4, 去: 音效音量 });
+      音(160, t, 1.5, { 量: 0.3, 滑到: 90, 去: 音效音量 });
+    },
+  },
+};
+
+// 音乐循环：提前一点点安排好接下来要弹的音
+let 下一拍 = 0, 拍数 = 0;
+function 开始音乐() {
+  下一拍 = ac.currentTime + 0.1;
+  setInterval(() => {
+    if (!ac || ac.state !== "running") return;
+    const 风 = 风格库[当前风格()];
+    const 长 = 60 / 风.速度 / 2;   // 八分音符长度
+    if (下一拍 < ac.currentTime) 下一拍 = ac.currentTime + 0.05;
+    while (下一拍 < ac.currentTime + 0.2) {
+      if (设置.音乐) 风.音乐(拍数, 下一拍, 长);
+      下一拍 += 长;
+      拍数++;
+    }
+  }, 50);
+}
+function 放音效(哪个) {
+  if (!ac || !设置.音效) return;
+  风格库[当前风格()][哪个](ac.currentTime + 0.01);
+}
+
+function 刷新面板() {
+  画角色按钮();
+  连接滑块("gravity", "重力", "gravityVal");
+  连接滑块("jump", "跳跃力度", "jumpVal");
+  连接滑块("pipeSpeed", "柱子速度", "pipeSpeedVal");
+  连接滑块("maxSpeed", "最快速度", "maxSpeedVal");
+  连接滑块("gap", "缝隙", "gapVal");
+  连接颜色("skyTop", "天空上");
+  连接颜色("skyBottom", "天空下");
+  连接颜色("pipeColor", "柱子颜色");
+  连接颜色("cloudColor", "白云颜色");
+  连接颜色("cityColor", "城市颜色");
+  连接勾选("showClouds", "显示白云");
+  连接勾选("showCity", "显示城市");
+  连接勾选("musicOn", "音乐", 更新音量);
+  连接勾选("sfxOn", "音效", 更新音量);
+  const sel = $("theme");
+  sel.value = 设置.主题;
+  sel.onchange = () => {
+    // 换主题：套用这个主题的颜色，然后刷新面板
+    const t = 主题库[sel.value];
+    设置.主题 = sel.value;
+    for (const k of ["天空上", "天空下", "柱子颜色", "城市颜色", "白云颜色"]) 设置[k] = t[k];
+    保存();
+    刷新面板();
+  };
+  $("styleTip").textContent = 主题().说明;
+  更新背景预览();
+  更新音量();
+}
+// 恢复默认时保留拍好的照片和背景图（但角色换回小猫）
+$("reset").onclick = () => {
+  设置 = { ...默认设置, 照片: 设置.照片, 背景图: 设置.背景图 };
+  保存();
+  刷新面板();
+};
+刷新面板();
+
+// ============================================
+// 游戏
+// ============================================
+const canvas = $("game");
+const ctx = canvas.getContext("2d");
+const 角色大小 = 40;
+const 柱子宽度 = 70;
+const 柱子间距 = 220;   // 两根柱子之间横向隔多远
+
+const 碰撞半径 = 15;    // 角色身体有多"胖"（碰撞用）
+
+// ============================================
+// 风景：白云 + 三层城市（视差：越近移动越快）
+// ============================================
+const 随机 = (a, b) => a + Math.random() * (b - a);
+
+// 白云：越大的云越"近"，飘得越快
+const 白云们 = [];
+for (let i = 0; i < 6; i++) {
+  const 大小 = 随机(0.6, 1.3);
+  白云们.push({ x: 随机(0, canvas.width), y: 随机(40, 260), 大小, 速度: 0.15 * 大小 });
+}
+
+// 城市三层：远（慢、淡、高）→ 中 → 近（快、深、矮，有亮着的窗户）
+function 造一层楼(最矮, 最高, 有窗户) {
+  const 楼们 = [];
+  let x = 0;
+  while (x < canvas.width + 120) {
+    const w = 随机(36, 80), h = 随机(最矮, 最高);
+    const 窗 = [];
+    if (有窗户) {
+      const 列 = Math.floor((w - 8) / 14), 行 = Math.floor((h - 12) / 18);
+      for (let r = 0; r < 行; r++) for (let c = 0; c < 列; c++) {
+        if (Math.random() < 0.55) 窗.push([6 + c * 14, 12 + r * 18]);
+      }
+    }
+    // 有的楼顶加个小天线
+    楼们.push({ x, w, h, 窗, 天线: Math.random() < 0.25 });
+    x += w + 随机(0, 6);
+  }
+  return { 楼们, 总宽: x, 偏移: 0 };
+}
+const 城市层 = [
+  { ...造一层楼(170, 320, false), 速度: 0.2, 透明: 0.3, 窗亮: 0 },
+  { ...造一层楼(110, 230, true),  速度: 0.45, 透明: 0.6, 窗亮: 0.35 },
+  { ...造一层楼(60, 150, true),   速度: 0.8, 透明: 1,   窗亮: 0.85 },
+];
+
+function 移动风景() {
+  const v = 实际速度();
+  白云们.forEach((云) => {
+    云.x -= 云.速度 * v + 0.05;
+    if (云.x < -90) { 云.x = canvas.width + 90; 云.y = 随机(40, 260); }
+  });
+  城市层.forEach((层) => { 层.偏移 = (层.偏移 + 层.速度 * v) % 层.总宽; });
+  上海层.偏移 = (上海层.偏移 + 上海层.速度 * v) % 上海层.总宽;
+  灯笼串偏移 = (灯笼串偏移 + 0.9 * v) % 60;
+  蝙蝠们.forEach((b) => {
+    b.x -= b.速度 * v + 0.3;
+    if (b.x < -30) { b.x = canvas.width + 30; b.y = 随机(60, 250); }
+  });
+}
+
+// ---------- 天空装饰 ----------
+const 雪花们 = [];
+for (let i = 0; i < 70; i++) 雪花们.push({ x: 随机(0, 400), y: 随机(0, 600), r: 随机(1, 3.2), 速: 随机(0.4, 1.2) });
+const 蝙蝠们 = [];
+for (let i = 0; i < 4; i++) 蝙蝠们.push({ x: 随机(0, 400), y: 随机(60, 250), 速度: 随机(0.3, 0.8), 相: 随机(0, 6) });
+let 灯笼串偏移 = 0;
+
+function 画月亮(x, y, r, 颜色) {
+  ctx.save();
+  ctx.shadowColor = 颜色; ctx.shadowBlur = 40;
+  ctx.fillStyle = 颜色;
+  ctx.beginPath(); ctx.arc(x, y, r, 0, Math.PI * 2); ctx.fill();
+  ctx.shadowBlur = 0;
+  ctx.fillStyle = "rgba(0,0,0,0.07)";   // 月亮上的坑
+  for (const [dx, dy, rr] of [[-12, -8, 9], [10, 12, 6], [14, -14, 4]]) {
+    ctx.beginPath(); ctx.arc(x + dx, y + dy, rr, 0, Math.PI * 2); ctx.fill();
+  }
+  ctx.restore();
+}
+
+// 画在城市后面
+function 画远处装饰() {
+  const 主 = 设置.主题;
+  if (主 === "万圣节") {
+    画月亮(300, 120, 50, "#fff3c4");
+    蝙蝠们.forEach((b) => 画emoji("🦇", b.x, b.y + Math.sin(时间 / 10 + b.相) * 8, 22));
+  } else if (主 === "中国") {
+    画月亮(320, 110, 38, "#ffe8a3");
+  } else if (主 === "圣诞") {
+    ctx.fillStyle = "rgba(255,255,255,0.8)";   // 星星
+    for (let i = 0; i < 30; i++) {
+      const sx = (i * 97) % 400, sy = (i * 53) % 260;
+      const 闪 = 0.5 + 0.5 * Math.sin(时间 / 15 + i);
+      ctx.globalAlpha = 闪;
+      ctx.fillRect(sx, sy, 2, 2);
+    }
+    ctx.globalAlpha = 1;
+  }
+}
+
+// 画在最前面（柱子之后、角色之前）
+function 画前景装饰() {
+  const 主 = 设置.主题;
+  if (主 === "圣诞") {   // 下雪
+    ctx.fillStyle = "white";
+    雪花们.forEach((f) => {
+      if (状态 !== "结束") {
+        f.y += f.速; f.x += Math.sin(时间 / 30 + f.r) * 0.4 - 0.2 * 实际速度();
+        if (f.y > 600) { f.y = -5; f.x = 随机(0, 400); }
+        if (f.x < -5) f.x = 405;
+      }
+      ctx.globalAlpha = 0.85;
+      ctx.beginPath(); ctx.arc(f.x, f.y, f.r, 0, Math.PI * 2); ctx.fill();
+    });
+    ctx.globalAlpha = 1;
+  } else if (主 === "中国") {   // 屏幕顶上挂一串红灯笼
+    ctx.strokeStyle = "#5a2a1a"; ctx.lineWidth = 2;
+    ctx.beginPath();
+    for (let x = -灯笼串偏移 - 60; x < 460; x += 60) {
+      ctx.moveTo(x, 6); ctx.quadraticCurveTo(x + 30, 22, x + 60, 6);
+    }
+    ctx.stroke();
+    for (let x = -灯笼串偏移; x < 460; x += 60) {
+      ctx.strokeStyle = "#5a2a1a"; ctx.lineWidth = 1;
+      ctx.beginPath(); ctx.moveTo(x, 6); ctx.lineTo(x, 16); ctx.stroke();
+      画灯笼(x, 28, 10);
+    }
+  }
+}
+
+function 画一朵云(云) {
+  const s = 云.大小;
+  ctx.beginPath();
+  ctx.arc(云.x, 云.y, 22 * s, 0, Math.PI * 2);
+  ctx.arc(云.x + 24 * s, 云.y - 12 * s, 26 * s, 0, Math.PI * 2);
+  ctx.arc(云.x + 50 * s, 云.y, 20 * s, 0, Math.PI * 2);
+  ctx.arc(云.x + 26 * s, 云.y + 8 * s, 22 * s, 0, Math.PI * 2);
+  ctx.fill();
+}
+
+const 窗户颜色 = { 默认: "255,228,150", 万圣节: "255,140,30", 圣诞: "255,220,120", 中国: "255,170,90" };
+
+function 画城市() {
+  const 主 = 设置.主题;
+  城市层.forEach((层, 第几层) => {
+    ctx.globalAlpha = 层.透明;
+    const 近 = 第几层 === 2;
+    // 同一层画两遍，首尾相接，就能无限循环
+    for (const 起点 of [-层.偏移, -层.偏移 + 层.总宽]) {
+      层.楼们.forEach((楼, 第几栋) => {
+        const x = 起点 + 楼.x;
+        if (x > canvas.width || x + 楼.w < 0) return;
+        const y = canvas.height - 楼.h;
+        ctx.fillStyle = 设置.城市颜色;
+        ctx.fillRect(x, y, 楼.w, 楼.h);
+        if (楼.天线) {
+          if (主 === "万圣节") {           // 尖尖的鬼屋屋顶
+            ctx.beginPath(); ctx.moveTo(x - 4, y); ctx.lineTo(x + 楼.w / 2, y - 40); ctx.lineTo(x + 楼.w + 4, y); ctx.fill();
+          } else if (主 === "中国" && 近) {  // 翘起来的瓦屋顶
+            ctx.beginPath();
+            ctx.moveTo(x - 10, y - 12);
+            ctx.quadraticCurveTo(x + 楼.w / 2, y + 2, x + 楼.w + 10, y - 12);
+            ctx.lineTo(x + 楼.w, y); ctx.lineTo(x, y); ctx.fill();
+          } else {
+            ctx.fillRect(x + 楼.w / 2 - 1.5, y - 16, 3, 16);
+          }
+        }
+        if (层.窗亮) {
+          ctx.fillStyle = `rgba(${窗户颜色[主] || 窗户颜色.默认}, ${层.窗亮})`;
+          楼.窗.forEach(([wx, wy]) => ctx.fillRect(x + wx, y + wy, 7, 9));
+        }
+        if (主 === "圣诞") {               // 屋顶积雪 + 近处楼的彩灯
+          ctx.fillStyle = "white";
+          ctx.fillRect(x - 2, y - 3, 楼.w + 4, 5);
+          if (近) {
+            const 灯色 = ["#ff4d4d", "#ffd23f", "#3bceac", "#4cc9f0"];
+            for (let i = 4; i < 楼.w; i += 9) {
+              ctx.fillStyle = 灯色[(i / 9 + Math.floor(时间 / 25)) % 4 | 0];
+              ctx.beginPath(); ctx.arc(x + i, y + 6 + Math.sin(i) * 2, 2.5, 0, Math.PI * 2); ctx.fill();
+            }
+          }
+        }
+        if (主 === "中国" && 近 && 第几栋 % 2 === 0) {   // 屋檐下挂两个灯笼
+          ctx.globalAlpha = 1;
+          画灯笼(x + 8, y + 14, 6);
+          画灯笼(x + 楼.w - 8, y + 14, 6);
+          ctx.globalAlpha = 层.透明;
+        }
+      });
+    }
+    // 中国主题：在最远那层后面加一层上海地标
+    if (主 === "中国" && 第几层 === 0) 画上海();
+  });
+  ctx.globalAlpha = 1;
+}
+
+// ---------- 上海天际线：东方明珠、金茂、环球金融中心、上海中心 ----------
+const 上海层 = { 偏移: 0, 速度: 0.3, 总宽: 640 };
+function 画上海() {
+  const H = canvas.height;
+  ctx.globalAlpha = 0.85;
+  for (const 起点 of [-上海层.偏移, -上海层.偏移 + 上海层.总宽]) {
+    const c = 设置.城市颜色;
+    ctx.fillStyle = c;
+    ctx.strokeStyle = c;
+
+    // 东方明珠
+    let x = 起点 + 90;
+    ctx.lineWidth = 6;
+    for (const dx of [-34, 0, 34]) {   // 三条腿
+      ctx.beginPath(); ctx.moveTo(x + dx, H); ctx.lineTo(x, H - 150); ctx.stroke();
+    }
+    ctx.fillRect(x - 4, H - 360, 8, 210);   // 柱身
+    ctx.fillRect(x - 1.5, H - 420, 3, 60);  // 天线
+    ctx.fillStyle = "#e0457b";              // 粉红色的珠子
+    ctx.beginPath(); ctx.arc(x, H - 150, 30, 0, Math.PI * 2); ctx.fill();
+    ctx.beginPath(); ctx.arc(x, H - 290, 19, 0, Math.PI * 2); ctx.fill();
+    ctx.beginPath(); ctx.arc(x, H - 365, 8, 0, Math.PI * 2); ctx.fill();
+    for (const yy of [H - 215, H - 235, H - 255]) { ctx.beginPath(); ctx.arc(x, yy, 6, 0, Math.PI * 2); ctx.fill(); }
+    ctx.fillStyle = c;
+
+    // 金茂大厦：一节一节往上收，像宝塔
+    x = 起点 + 270;
+    let 宽 = 44, yy = H;
+    for (let i = 0; i < 8; i++) {
+      const 高 = 38 - i * 2;
+      ctx.fillRect(x - 宽 / 2, yy - 高, 宽, 高);
+      yy -= 高; 宽 -= 4;
+    }
+    ctx.fillRect(x - 2, yy - 40, 4, 40);
+
+    // 环球金融中心：上面有个梯形"开瓶器"洞
+    x = 起点 + 360;
+    ctx.beginPath();
+    ctx.moveTo(x - 30, H); ctx.lineTo(x - 16, H - 340); ctx.lineTo(x + 16, H - 340); ctx.lineTo(x + 30, H);
+    ctx.fill();
+    ctx.fillStyle = 设置.天空上;
+    ctx.globalAlpha = 0.9;
+    ctx.beginPath();
+    ctx.moveTo(x - 9, H - 330); ctx.lineTo(x + 9, H - 330); ctx.lineTo(x + 12, H - 305); ctx.lineTo(x - 12, H - 305);
+    ctx.fill();
+    ctx.globalAlpha = 0.85;
+    ctx.fillStyle = c;
+
+    // 上海中心：最高，扭着往上变细
+    x = 起点 + 470;
+    ctx.beginPath();
+    ctx.moveTo(x - 32, H);
+    ctx.quadraticCurveTo(x - 30, H - 250, x - 8, H - 430);
+    ctx.lineTo(x + 6, H - 440);
+    ctx.quadraticCurveTo(x + 22, H - 250, x + 32, H);
+    ctx.fill();
+    ctx.strokeStyle = "rgba(255,255,255,0.25)"; ctx.lineWidth = 1.5;
+    ctx.beginPath(); ctx.moveTo(x + 20, H); ctx.quadraticCurveTo(x + 5, H - 220, x + 4, H - 430); ctx.stroke();
+  }
+  ctx.globalAlpha = 1;
+}
+
+const cat = { x: 100, y: 300, speed: 0 };
+let 柱子们 = [];   // 每根柱子：{ x, 缝隙顶部, 已通过, 物品 }
+let 分数 = 0;
+let 最高分 = 0;
+try { 最高分 = Number(localStorage.getItem("飞飞小猫最高分")) || 0; } catch (e) {}
+let 收集数 = 0;
+let 累计收集 = 0;
+try { 累计收集 = Number(localStorage.getItem("飞飞小猫累计收集")) || 0; } catch (e) {}
+
+// 游戏状态："准备"（等第一次点击）/ "游戏中" / "结束"
+let 状态 = "准备";
+let 时间 = 0;   // 用来让角色在准备时上下飘
+
+// ---------- 越飞越快 ----------
+let 当前速度 = 设置.柱子速度;
+const 每帧加速 = 0.0004;   // 每一帧快一点点：从 1 到 2 大约 40 秒
+function 实际速度() {
+  return 当前速度 * (道具.慢动作 > 0 ? 0.55 : 1);
+}
+
+// ---------- 收集物品 & 道具 ----------
+const 收集物 = { 默认: "⭐", 万圣节: "🍬", 圣诞: "🎁", 中国: "🧧" };
+const 道具图标 = { 护盾: "🛡️", 慢动作: "⏳", 变小: "🍄" };
+const 道具时长 = { 慢动作: 300, 变小: 360 };   // 帧数（约 5 秒、6 秒）
+let 道具 = { 护盾: false, 慢动作: 0, 变小: 0 };
+let 无敌 = 0;      // 护盾挡住一次后，短暂无敌（会闪）
+let 震动 = 0;      // 屏幕震动强度
+let 飘字们 = [];   // "+1" 之类往上飘的字
+
+function 半径() { return 道具.变小 > 0 ? 碰撞半径 * 0.6 : 碰撞半径; }
+
+function 新柱子(x) {
+  const 最小 = 60;
+  const 最大 = canvas.height - 设置.缝隙 - 60;
+  const 顶 = 最小 + Math.random() * (最大 - 最小);
+  // 缝里放东西：大多数是收集物，偶尔是道具
+  let 物品 = null;
+  const r = Math.random();
+  const 偏 = 随机(-0.25, 0.25) * 设置.缝隙;
+  if (r < 0.12) 物品 = { 类型: ["护盾", "慢动作", "变小"][Math.floor(Math.random() * 3)], 偏 };
+  else if (r < 0.85) 物品 = { 类型: "收集", 偏 };
+  return { x, 缝隙顶部: 顶, 已通过: false, 物品 };
+}
+function 重新开始() {
+  cat.y = 300;
+  cat.speed = 0;
+  分数 = 0;
+  收集数 = 0;
+  当前速度 = 设置.柱子速度;
+  道具 = { 护盾: false, 慢动作: 0, 变小: 0 };
+  无敌 = 0;
+  飘字们 = [];
+  柱子们 = [新柱子(canvas.width + 50)];
+  状态 = "准备";
+  $("overlay").classList.remove("show");
+}
+重新开始();
+
+function 震一下(强度) {
+  震动 = 强度;
+  try { if (navigator.vibrate) navigator.vibrate(强度 > 10 ? 200 : 60); } catch (e) {}   // 安卓手机会真的震
+}
+function 飘(文字, x, y, 颜色) {
+  飘字们.push({ 文字, x, y, 寿命: 50, 颜色: 颜色 || "white" });
+}
+
+function 游戏结束() {
+  状态 = "结束";
+  放音效("撞");
+  震一下(18);
+  if (分数 > 最高分) {
+    最高分 = 分数;
+    try { localStorage.setItem("飞飞小猫最高分", 最高分); } catch (e) {}
+  }
+  累计收集 += 收集数;
+  try { localStorage.setItem("飞飞小猫累计收集", 累计收集); } catch (e) {}
+  $("finalScore").textContent = 分数;
+  $("bestScore").textContent = 最高分;
+  const 图 = 收集物[设置.主题] || "⭐";
+  $("coinCount").textContent = 收集数 + " " + 图;
+  $("coinTotal").textContent = 累计收集;
+  结束时间 = 时间;
+  // 等震动结束再弹窗，更有"撞到了"的感觉
+  setTimeout(() => { if (状态 === "结束") $("overlay").classList.add("show"); }, 450);
+}
+let 结束时间 = 0;
+$("restart").onclick = 重新开始;
+
+// 点一下 / 按空格 → 往上飞（手机用触摸，电脑用鼠标或键盘）
+function 拍翅膀() {
+  if (状态 === "结束") {
+    if (时间 - 结束时间 > 40) 重新开始();   // 结束后过一会儿，再点就重新开始
+    return;
+  }
+  if (状态 === "准备") 状态 = "游戏中";
+  cat.speed = -设置.跳跃力度;
+  初始化声音();
+  放音效("跳");
+}
+canvas.addEventListener("pointerdown", (e) => { e.preventDefault(); 拍翅膀(); });
+document.addEventListener("keydown", (e) => {
+  if (e.code === "Space" || e.code === "ArrowUp") { e.preventDefault(); 拍翅膀(); }
+});
+
+// 有没有撞到这根柱子？
+function 撞到柱子(p) {
+  const r = 半径();
+  const 横向重叠 = cat.x + r > p.x && cat.x - r < p.x + 柱子宽度;
+  const 不在缝里 = cat.y - r < p.缝隙顶部 || cat.y + r > p.缝隙顶部 + 设置.缝隙;
+  return 横向重叠 && 不在缝里;
+}
+function 物品位置(p) {
+  return { x: p.x + 柱子宽度 / 2, y: p.缝隙顶部 + 设置.缝隙 / 2 + p.物品.偏 + Math.sin(时间 / 15 + p.x) * 4 };
+}
+
+// 撞到了：有护盾就挡掉，没有就结束
+function 被撞() {
+  if (无敌 > 0) return false;
+  if (道具.护盾) {
+    道具.护盾 = false;
+    无敌 = 70;
+    震一下(8);
+    放音效("撞");
+    飘("护盾碎了！", cat.x, cat.y - 30, "#4cc9f0");
+    return false;
+  }
+  游戏结束();
+  return true;
+}
+
+function update() {
+  时间++;
+  if (状态 !== "结束") 移动风景();
+  if (状态 === "准备") {
+    cat.y = 300 + Math.sin(时间 / 12) * 10;   // 轻轻上下飘，等你点
+    当前速度 = 设置.柱子速度;
+    return;
+  }
+  if (状态 === "结束") return;
+
+  // 越飞越快（有上限）
+  const 上限 = Math.max(设置.最快速度, 设置.柱子速度);
+  当前速度 = Math.min(上限, 当前速度 + 每帧加速);
+
+  // 道具倒计时
+  if (道具.慢动作 > 0) 道具.慢动作--;
+  if (道具.变小 > 0) 道具.变小--;
+  if (无敌 > 0) 无敌--;
+
+  // 小猫
+  const r = 半径();
+  cat.speed += 设置.重力;
+  cat.y += cat.speed;
+  // 顶到天花板：不让飞出去
+  if (cat.y < r) {
+    cat.y = r;
+    cat.speed = 0;
+  }
+  // 掉到地上：有护盾就弹起来，没有就结束
+  if (cat.y + r > canvas.height) {
+    cat.y = canvas.height - r;
+    if (被撞()) return;
+    cat.speed = -设置.跳跃力度 * 1.3;
+  }
+
+  // 撞柱子 & 计分 & 吃东西
+  for (const p of 柱子们) {
+    if (撞到柱子(p) && 被撞()) return;
+    if (!p.已通过 && p.x + 柱子宽度 < cat.x) {
+      p.已通过 = true;
+      分数++;
+      放音效("得分");
+    }
+    if (p.物品 && !p.物品.吃了) {
+      const 位 = 物品位置(p);
+      if (Math.hypot(位.x - cat.x, 位.y - cat.y) < r + 16) {
+        p.物品.吃了 = true;
+        if (p.物品.类型 === "收集") {
+          收集数++;
+          飘("+1 " + (收集物[设置.主题] || "⭐"), 位.x, 位.y, "#ffd23f");
+          放音效("得分");
+        } else {
+          const 种 = p.物品.类型;
+          if (种 === "护盾") 道具.护盾 = true;
+          else 道具[种] = 道具时长[种];
+          飘(道具图标[种] + " " + 种 + "！", 位.x, 位.y, "#4cc9f0");
+          放音效("跳"); 放音效("得分");
+        }
+      }
+    }
+  }
+
+  // 柱子往左移动
+  const v = 实际速度();
+  柱子们.forEach((p) => (p.x -= v));
+  // 最右边的柱子走够远了，就在右边再生成一根
+  const 最后一根 = 柱子们[柱子们.length - 1];
+  if (最后一根.x < canvas.width - 柱子间距) {
+    柱子们.push(新柱子(canvas.width));
+  }
+  // 跑出屏幕左边的柱子删掉
+  柱子们 = 柱子们.filter((p) => p.x + 柱子宽度 > 0);
+}
+
+// ---------- 每个主题的柱子 ----------
+function 画柱子(p) {
+  const 顶 = p.缝隙顶部, 底 = 顶 + 设置.缝隙, x = p.x, w = 柱子宽度, H = canvas.height;
+  ctx.save();
+  if (设置.主题 === "万圣节") 柱_万圣节(x, w, 顶, 底, H);
+  else if (设置.主题 === "圣诞") 柱_圣诞(x, w, 顶, 底, H);
+  else if (设置.主题 === "中国") 柱_中国(x, w, 顶, 底, H);
+  else 柱_默认(p);
+  ctx.restore();
+}
+
+function 画emoji(e, x, y, 大小) {
+  ctx.fillStyle = "#000";
+  ctx.font = 大小 + "px 'Segoe UI Emoji', 'Apple Color Emoji', serif";
+  ctx.textAlign = "center";
+  ctx.textBaseline = "middle";
+  ctx.fillText(e, x, y);
+}
+
+// 🎃 万圣节：旧木板柱子 + 南瓜灯 + 骷髅 + 蜘蛛网
+function 柱_万圣节(x, w, 顶, 底, H) {
+  ctx.fillStyle = 设置.柱子颜色;
+  ctx.fillRect(x, 0, w, 顶);
+  ctx.fillRect(x, 底, w, H - 底);
+  // 木板缝
+  ctx.fillStyle = "rgba(0,0,0,0.35)";
+  for (let i = 17; i < w; i += 17) { ctx.fillRect(x + i, 0, 2, 顶); ctx.fillRect(x + i, 底, 2, H - 底); }
+  // 柱子帽：发出橙光的边
+  ctx.fillStyle = "#2a1d38";
+  ctx.fillRect(x - 5, 顶 - 28, w + 10, 28);
+  ctx.fillRect(x - 5, 底, w + 10, 28);
+  ctx.fillStyle = "#ff7b2e";
+  ctx.fillRect(x - 5, 顶 - 3, w + 10, 3);
+  ctx.fillRect(x - 5, 底, w + 10, 3);
+  画emoji("💀", x + w / 2, 顶 - 14, 20);
+  画emoji("🎃", x + w / 2, 底 + 15, 22);
+  // 蜘蛛网（上柱子的左下角）
+  ctx.strokeStyle = "rgba(230,230,240,0.6)";
+  ctx.lineWidth = 1;
+  const cx = x, cy = 顶 - 28;
+  for (let r = 8; r <= 24; r += 8) {
+    ctx.beginPath(); ctx.arc(cx, cy, r, -Math.PI / 2, 0); ctx.stroke();
+  }
+  for (let a = 0; a <= 3; a++) {
+    const ang = -Math.PI / 2 + a * Math.PI / 6;
+    ctx.beginPath(); ctx.moveTo(cx, cy); ctx.lineTo(cx + Math.cos(ang) * 26, cy + Math.sin(ang) * 26); ctx.stroke();
+  }
+}
+
+// 🎄 圣诞：拐杖糖条纹 + 积雪 + 彩灯花环
+function 柱_圣诞(x, w, 顶, 底, H) {
+  for (const [y, h] of [[0, 顶], [底, H - 底]]) {
+    ctx.save();
+    ctx.beginPath(); ctx.rect(x, y, w, h); ctx.clip();
+    ctx.fillStyle = "#fffaf5";
+    ctx.fillRect(x, y, w, h);
+    ctx.fillStyle = 设置.柱子颜色;
+    for (let i = y - w; i < y + h + w; i += 30) {
+      ctx.beginPath();
+      ctx.moveTo(x, i); ctx.lineTo(x + w, i - w * 0.6);
+      ctx.lineTo(x + w, i - w * 0.6 + 14); ctx.lineTo(x, i + 14);
+      ctx.fill();
+    }
+    ctx.restore();
+  }
+  // 上柱子：绿色花环 + 彩灯
+  ctx.fillStyle = "#1b7a3d";
+  ctx.fillRect(x - 5, 顶 - 18, w + 10, 18);
+  const 灯色 = ["#ff4d4d", "#ffd23f", "#3bceac", "#4cc9f0"];
+  for (let i = 0; i < 6; i++) {
+    ctx.fillStyle = 灯色[(i + Math.floor(时间 / 20)) % 4];   // 一闪一闪
+    ctx.beginPath(); ctx.arc(x + 2 + i * 13, 顶 - 6, 3.5, 0, Math.PI * 2); ctx.fill();
+  }
+  // 下柱子：积雪
+  ctx.fillStyle = "white";
+  ctx.fillRect(x - 5, 底, w + 10, 12);
+  for (let i = 0; i <= w + 10; i += 16) {
+    ctx.beginPath(); ctx.arc(x - 5 + i, 底 + 12, 7, 0, Math.PI); ctx.fill();
+  }
+}
+
+// 🏮 中国：红漆柱 + 金色箍 + 飞檐柱头 + 灯笼
+function 柱_中国(x, w, 顶, 底, H) {
+  for (const [y, h] of [[0, 顶], [底, H - 底]]) {
+    const g = ctx.createLinearGradient(x, 0, x + w, 0);
+    g.addColorStop(0, "rgba(0,0,0,0.25)");
+    g.addColorStop(0.35, "rgba(255,255,255,0.15)");
+    g.addColorStop(1, "rgba(0,0,0,0.35)");
+    ctx.fillStyle = 设置.柱子颜色;
+    ctx.fillRect(x, y, w, h);
+    ctx.fillStyle = g;
+    ctx.fillRect(x, y, w, h);
+  }
+  // 金色箍
+  ctx.fillStyle = "#f4c542";
+  ctx.fillRect(x, 顶 - 40, w, 5);
+  ctx.fillRect(x, 底 + 35, w, 5);
+  // 飞檐柱头（往两边翘起来）
+  const 檐 = (y, 朝下) => {
+    const d = 朝下 ? 1 : -1;
+    ctx.fillStyle = "#14524a";
+    ctx.beginPath();
+    ctx.moveTo(x - 12, y + d * 2);
+    ctx.quadraticCurveTo(x + w / 2, y + d * 10, x + w + 12, y + d * 2);
+    ctx.lineTo(x + w + 4, y + d * 22);
+    ctx.lineTo(x - 4, y + d * 22);
+    ctx.closePath();
+    ctx.fill();
+    ctx.fillStyle = "#f4c542";
+    ctx.fillRect(x - 4, y + (朝下 ? 20 : -22), w + 8, 2);
+  };
+  檐(顶, false);
+  檐(底, true);
+  // 上柱子上挂一个小灯笼（画在柱子里面，不挡缝）
+  画灯笼(x + w / 2, 顶 - 70, 13);
+}
+
+// 一个红灯笼（城市和柱子都会用到）
+function 画灯笼(cx, cy, r) {
+  ctx.save();
+  ctx.shadowColor = "rgba(255,80,40,0.8)";
+  ctx.shadowBlur = r;
+  ctx.fillStyle = "#e5262a";
+  ctx.beginPath(); ctx.ellipse(cx, cy, r * 1.15, r, 0, 0, Math.PI * 2); ctx.fill();
+  ctx.shadowBlur = 0;
+  ctx.strokeStyle = "rgba(120,0,0,0.5)"; ctx.lineWidth = 1;
+  ctx.beginPath(); ctx.ellipse(cx, cy, r * 0.5, r, 0, 0, Math.PI * 2); ctx.stroke();
+  ctx.fillStyle = "#f4c542";
+  ctx.fillRect(cx - r * 0.5, cy - r - 3, r, 4);
+  ctx.fillRect(cx - r * 0.5, cy + r - 1, r, 4);
+  ctx.strokeStyle = "#f4c542";
+  ctx.beginPath(); ctx.moveTo(cx, cy + r + 3); ctx.lineTo(cx, cy + r * 1.9); ctx.stroke();
+  ctx.restore();
+}
+
+function 柱_默认(p) {
+  const 底部开始 = p.缝隙顶部 + 设置.缝隙;
+  ctx.fillStyle = 设置.柱子颜色;
+  // 上面那根
+  ctx.fillRect(p.x, 0, 柱子宽度, p.缝隙顶部);
+  // 下面那根
+  ctx.fillRect(p.x, 底部开始, 柱子宽度, canvas.height - 底部开始);
+  // 柱子帽子（更宽一点、颜色亮一点）
+  ctx.fillStyle = "rgba(255,255,255,0.3)";
+  ctx.fillRect(p.x - 5, p.缝隙顶部 - 20, 柱子宽度 + 10, 20);
+  ctx.fillRect(p.x - 5, 底部开始, 柱子宽度 + 10, 20);
+  // 高光条纹
+  ctx.fillStyle = "rgba(255,255,255,0.2)";
+  ctx.fillRect(p.x + 10, 0, 8, p.缝隙顶部 - 20);
+  ctx.fillRect(p.x + 10, 底部开始 + 20, 8, canvas.height);
+}
+
+function draw() {
+  // 震屏：整个画面随机抖一抖，慢慢停下
+  ctx.save();
+  if (震动 > 0.5) {
+    ctx.translate(随机(-震动, 震动), 随机(-震动, 震动));
+    震动 *= 0.88;
+  } else 震动 = 0;
+
+  // 天空
+  const sky = ctx.createLinearGradient(0, 0, 0, canvas.height);
+  sky.addColorStop(0, 设置.天空上);
+  sky.addColorStop(1, 设置.天空下);
+  ctx.fillStyle = sky;
+  ctx.fillRect(-20, -20, canvas.width + 40, canvas.height + 40);   // 画大一点，震动时边缘不露底
+
+  // 上传的背景图（盖在天空上面）
+  if (设置.背景图 && 背景图.complete && 背景图.naturalWidth) {
+    ctx.drawImage(背景图, 0, 0, canvas.width, canvas.height);
+  }
+
+  画远处装饰();
+
+  // 白云
+  if (设置.显示白云) {
+    ctx.fillStyle = 设置.白云颜色;
+    ctx.globalAlpha = 0.9;
+    白云们.forEach(画一朵云);
+    ctx.globalAlpha = 1;
+  }
+
+  // 城市
+  if (设置.显示城市) 画城市();
+
+  // 柱子
+  柱子们.forEach(画柱子);
+  画前景装饰();
+
+  // 缝里的收集物 / 道具（一闪一闪发光）
+  柱子们.forEach((p) => {
+    if (!p.物品 || p.物品.吃了) return;
+    const 位 = 物品位置(p);
+    const 是道具 = p.物品.类型 !== "收集";
+    ctx.save();
+    ctx.shadowColor = 是道具 ? "#4cc9f0" : "#ffd23f";
+    ctx.shadowBlur = 12 + Math.sin(时间 / 8) * 6;
+    ctx.fillStyle = 是道具 ? "rgba(76,201,240,0.35)" : "rgba(255,210,63,0.35)";
+    ctx.beginPath(); ctx.arc(位.x, 位.y, 16, 0, Math.PI * 2); ctx.fill();
+    ctx.restore();
+    画emoji(是道具 ? 道具图标[p.物品.类型] : (收集物[设置.主题] || "⭐"), 位.x, 位.y + 1, 22);
+  });
+
+  // 角色
+  ctx.save();
+  ctx.translate(cat.x, cat.y);
+  ctx.rotate(Math.max(-0.5, Math.min(0.8, cat.speed * 0.06)));
+  if (道具.变小 > 0) ctx.scale(0.6, 0.6);
+  if (无敌 > 0 && Math.floor(无敌 / 5) % 2) ctx.globalAlpha = 0.35;   // 无敌时一闪一闪
+  // 护盾：角色外面一圈蓝色泡泡
+  if (道具.护盾) {
+    ctx.fillStyle = "rgba(76,201,240,0.25)";
+    ctx.strokeStyle = "rgba(76,201,240,0.9)";
+    ctx.lineWidth = 3;
+    ctx.beginPath(); ctx.arc(0, 0, 角色大小 / 2 + 13 + Math.sin(时间 / 6) * 2, 0, Math.PI * 2);
+    ctx.fill(); ctx.stroke();
+  }
+  // 白色光圈 + 阴影，让角色在任何背景上都清楚
+  ctx.shadowColor = "rgba(0,0,0,0.35)";
+  ctx.shadowBlur = 8;
+  ctx.shadowOffsetY = 3;
+  ctx.fillStyle = "white";
+  ctx.beginPath();
+  ctx.arc(0, 0, 角色大小 / 2 + 5, 0, Math.PI * 2);
+  ctx.fill();
+  ctx.shadowColor = "transparent";
+  if (设置.角色 === "照片" && 照片图.complete && 照片图.naturalWidth) {
+    // 圆形照片
+    ctx.beginPath();
+    ctx.arc(0, 0, 角色大小 / 2 + 2, 0, Math.PI * 2);
+    ctx.clip();
+    const s = 角色大小 + 4;
+    ctx.drawImage(照片图, -s / 2, -s / 2, s, s);
+  } else {
+    // 之前画柱子时 fillStyle 是半透明的，emoji 也被弄淡了——这里改回不透明
+    ctx.fillStyle = "#000";
+    ctx.font = 角色大小 + "px 'Segoe UI Emoji', 'Apple Color Emoji', serif";
+    ctx.textAlign = "center";
+    ctx.textBaseline = "middle";
+    ctx.fillText(设置.角色 === "照片" ? "🐱" : 设置.角色, 0, 2);
+  }
+  ctx.restore();
+
+  // 往上飘的字（"+1 ⭐"、"护盾！"）
+  飘字们.forEach((f) => {
+    ctx.globalAlpha = Math.min(1, f.寿命 / 25);
+    ctx.font = "bold 18px 'Microsoft YaHei', 'Segoe UI Emoji', sans-serif";
+    ctx.textAlign = "center";
+    ctx.textBaseline = "middle";
+    ctx.lineWidth = 4;
+    ctx.strokeStyle = "rgba(43,35,64,0.7)";
+    ctx.fillStyle = f.颜色;
+    ctx.strokeText(f.文字, f.x, f.y);
+    ctx.fillText(f.文字, f.x, f.y);
+    f.y -= 0.8; f.寿命--;
+  });
+  ctx.globalAlpha = 1;
+  飘字们 = 飘字们.filter((f) => f.寿命 > 0);
+
+  ctx.restore();   // 震屏结束（下面的分数不跟着抖）
+
+  // 左上角：这局收集了多少 + 正在生效的道具
+  ctx.textAlign = "left";
+  ctx.textBaseline = "middle";
+  ctx.font = "bold 20px 'Microsoft YaHei', 'Segoe UI Emoji', sans-serif";
+  ctx.lineWidth = 4;
+  ctx.strokeStyle = "rgba(43,35,64,0.6)";
+  ctx.fillStyle = "white";
+  const 收集文字 = (收集物[设置.主题] || "⭐") + " " + 收集数;
+  ctx.strokeText(收集文字, 14, 30);
+  ctx.fillText(收集文字, 14, 30);
+  let 道具y = 62;
+  for (const 种 of ["护盾", "慢动作", "变小"]) {
+    const 剩 = 种 === "护盾" ? (道具.护盾 ? 1 : 0) : 道具[种] / 道具时长[种];
+    if (剩 <= 0) continue;
+    画emoji(道具图标[种], 26, 道具y, 18);
+    if (种 !== "护盾") {   // 剩余时间条
+      ctx.fillStyle = "rgba(0,0,0,0.3)"; ctx.fillRect(42, 道具y - 4, 50, 8);
+      ctx.fillStyle = "#4cc9f0";         ctx.fillRect(42, 道具y - 4, 50 * 剩, 8);
+    }
+    道具y += 28;
+  }
+  // 右上角：现在的速度
+  ctx.textAlign = "right";
+  ctx.font = "bold 14px 'Microsoft YaHei', sans-serif";
+  ctx.fillStyle = "white";
+  ctx.lineWidth = 3;
+  const 速度文字 = "速度 ×" + 实际速度().toFixed(2);
+  ctx.strokeText(速度文字, canvas.width - 14, 30);
+  ctx.fillText(速度文字, canvas.width - 14, 30);
+
+  // 顶部分数
+  ctx.textAlign = "center";
+  ctx.textBaseline = "top";
+  ctx.font = "bold 52px 'Microsoft YaHei', sans-serif";
+  ctx.lineWidth = 6;
+  ctx.strokeStyle = "rgba(43,35,64,0.6)";
+  ctx.fillStyle = "white";
+  ctx.strokeText(分数, canvas.width / 2, 30);
+  ctx.fillText(分数, canvas.width / 2, 30);
+
+  // 准备时的提示
+  if (状态 === "准备") {
+    ctx.font = "bold 24px 'Microsoft YaHei', sans-serif";
+    ctx.lineWidth = 5;
+    ctx.strokeText("点一下开始飞！", canvas.width / 2, 380);
+    ctx.fillText("点一下开始飞！", canvas.width / 2, 380);
+  }
+}
+
+function loop() {
+  update();
+  draw();
+  requestAnimationFrame(loop);
+}
+loop();
+</script>
+</body>
+</html>
